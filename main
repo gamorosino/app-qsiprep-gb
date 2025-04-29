@@ -40,9 +40,9 @@ fi
 if [[ $space == "MNI152NLin2009cAsym" ]]; then
     echo "Performing normalization to MNI152NLin2009cAsym space."
     optional="$optional --anatomical-template MNI152NLin2009cAsym"
-else
-    echo "Skipping normalization to template space, using T1w space."
-    optional="$optional --skip-anat-based-spatial-normalization"
+# else
+#     echo "Skipping normalization to template space, using T1w space."
+#     optional="$optional --skip-anat-based-spatial-normalization"
 fi
 
 # boolean options
