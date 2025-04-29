@@ -15,6 +15,7 @@ outstem=output
 
 # get basename for output
 sub=$(jq -r '._inputs[0].meta.subject' config.json)
+space=$(jq -r .output_space config.json)
 xflip=$(jq -r .xflip config.json)
 ses=$(jq -r '._inputs[] | select(.id == "dwi") | .meta.session' config.json)
 ses=($ses)
