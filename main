@@ -13,11 +13,13 @@ bl2bids
 WORKDIRNAME=$(pwd)/qsipworkdir
 outdir=$(pwd)/output
 
+dwi=$(jq -r .dwi config.json)
+## check if input was t1 or t2, so far only t1
+
 space=$(jq -r .output_space config.json)
 resolution=$(jq -r .output_resolution config.json) 
 #sub=$(jq -r '._inputs[] | select(.id == "t1w") | .meta.subject' config.json)
 sub=$(jq -r '._inputs[0].meta.subject' config.json)
-dwi=$(jq -r .dwi config.json)
 skipbidsvalidation=$(jq -r .skipbidsvalidation config.json)
 denoise_method=$(jq -r .denoise_method config.json)
 distortion_group_merge=$(jq -r .distortion_group_merge config.json)
@@ -28,6 +30,10 @@ syn_sdc=$(jq -r .syn_sdc config.json)
 force_syn=$(jq -r .force_syn config.json) #keep to be back compatible
 check_flip_bvecs=$(jq -r .check_flip_bvecs config.json)
 #reconall=$(jq -r .reconall config.json)
+
+b1_biascorrect_stage=$(jq -r .b1_biascorrect_stage config.json)
+hmc_model=$(jq -r .hmc_model config.json)
+pepolar_method=$(jq -r .pepolar_method config.json)
 
 optional=""
 
@@ -48,7 +54,7 @@ fi
 # boolean options
 [ $skipbidsvalidation == "true" ] && optional="$optional --skip-bids-validation"
 [ $infant == "true" ] && optional="$optional --infant"
-[ $syn_sdc == "true" ] && optional="$optional --use-syn-sdc --force-syn"
+# [ $syn_sdc == "true" ] && optional="$optional --use-syn-sdc --force-syn"
 #[ $reconall == "true" ] && optional="$optional --do-reconall"
     
 # remove if stuff already exists
@@ -91,22 +97,55 @@ export SINGULARITYENV_TEMPLATEFLOW_HOME=$PWD/templateflow
 
 # QSIPrep
 time singularity exec -e \
-    docker://pennbbl/qsiprep:0.22.1 \
+    docker://pennbbl/qsiprep:0.24.0 \
     qsiprep \
     --fs-license-file license.txt \
+    --anat-modality T1w \
     --output-resolution $resolution \
     --denoise-method $denoise_method \
     --unringing-method $unringing_method \
     --hmc-transform $hmc_transform \
+    --hmc-model $hmc_model \
+    --b1-biascorrect-stage $b1_biascorrect_stage \
+    --pepolar-method $pepolar_method \
     --nthreads 8 \
     --verbose \
     --work-dir $WORKDIRNAME \
-    bids $outdir participant \
-    $optional
+    $optional \
+    bids $outdir participant
+
+
+## yes
+# --fs-license-file PATH
+# --skip-anat-based-spatial-normalization
+
+# --output-resolution OUTPUT_RESOLUTION
+# --anat-modality {T1w,T2w,none}
+# --anatomical-template {MNI152NLin2009cAsym}
+# --denoise-method {dwidenoise(d),patch2self,none}
+# --distortion-group-merge {concat,average,none(d)}
+# --unringing-method {none(d),mrdegibbs,rpg}
+
+# --b1-biascorrect-stage {final(d),none,legacy}
+# --hmc-transform {Affine(d),Rigid}
+# --hmc-model {none,3dSHORE,eddy(d?),tensor}
+# --pepolar-method {TOPUP(d),DRBUDDI,TOPUP+DRBUDDI}
+# --use-syn-sdc [{warn,error(d)}]
+
+## maybe
+# --b0-to-t1w-transform {Rigid(d),Affine}  ## check HCP pipeline for this param
+# --intramodal-template-iters INTRAMODAL_TEMPLATE_ITERS
+# --intramodal-template-transform {Rigid,Affine,BSplineSyN,SyN}
+# --eddy-config EDDY_CONFIG
+# --shoreline-iters SHORELINE_ITERS
+#    [--fmap-bspline] [--fmap-no-demean]
+
+
     
 echo "done with qsiprep! - now organizing output"
 ./qsiprep2bl.sh
 
-rm -r $WORKDIRNAME # save lots of space    
+# rm -r $WORKDIRNAME # save lots of space    
 
 echo "all done!" 
+
