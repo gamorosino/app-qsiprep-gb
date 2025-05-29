@@ -66,18 +66,15 @@ if [[ $dwi_use_bidsguess == "true" ]]; then
     jsons=$(ls bids/sub-$sub/dwi/*.json)
     for json in $jsons
     do
-        echo $json
         ## get bidsguess from json 
         guess=$(jq -r .BidsGuess[1] $json)
-        echo $guess
-
-        ## rename nii.gz/bvec/bval files with sub-XXX$(guess)
+        ## rename nii.gz/bvec/bval/... files with sub-XXX$(guess)
         base=$(basename $json .json)
+        echo "Renaming $base files with BidsGuess: $guess"
         for fn in $(ls bids/sub-$sub/dwi/$base.*)
         do
             suffix=${fn#*.}
-            echo $fn
-            echo bids/sub-$sub/dwi/sub-${sub}${guess}.${suffix}
+            mv $fn bids/sub-$sub/dwi/sub-${sub}${guess}.${suffix}
         done
     done
 fi
