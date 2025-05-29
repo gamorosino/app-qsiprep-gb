@@ -56,6 +56,31 @@ fi
 [ $infant == "true" ] && optional="$optional --infant"
 # [ $syn_sdc == "true" ] && optional="$optional --use-syn-sdc --force-syn"
 #[ $reconall == "true" ] && optional="$optional --do-reconall"
+
+## bl2bids not compatible with opposite PE directions: 
+## it adds arbitrary acq labels & mess up with file grouping.
+## use the bidsguess as labeling instead
+dwi_use_bidsguess=$(jq -r .dwi_use_bidsguess config.json)
+if [[ $dwi_use_bidsguess == "true" ]]; then
+    ## for each dwi.json/nii.gz file in bids/sub-XXX/dwi
+    jsons=$(ls bids/sub-$sub/dwi/*.json)
+    for json in $jsons
+    do
+        echo $json
+        ## get bidsguess from json 
+        guess=$(jq -r .BidsGuess[1] $json)
+        echo $guess
+
+        ## rename nii.gz/bvec/bval files with sub-XXX$(guess)
+        base=$(basename $json .json)
+        for fn in $(ls bids/sub-$sub/dwi/$base.*)
+        do
+            suffix=${fn#*.}
+            echo $fn
+            echo bids/sub-$sub/dwi/sub-${sub}${guess}.${suffix}
+        done
+    done
+fi
     
 # remove if stuff already exists
 rm -rf $WORKDIRNAME && mkdir -p $WORKDIRNAME
@@ -111,6 +136,7 @@ time singularity exec -e \
     --nthreads 8 \
     --verbose \
     --work-dir $WORKDIRNAME \
+    --stop-on-first-crash \
     $optional \
     bids $outdir participant
 
