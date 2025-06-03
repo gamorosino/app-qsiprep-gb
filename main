@@ -119,7 +119,7 @@ export SINGULARITYENV_TEMPLATEFLOW_HOME=$PWD/templateflow
 
 # QSIPrep
 time singularity exec -e \
-    docker://pennbbl/qsiprep:0.24.0 \
+    docker://pennlinc/qsiprep:1.0.1 \
     qsiprep \
     --fs-license-file license.txt \
     --anat-modality T1w \
