@@ -92,7 +92,13 @@ if [ $xflip == "true" ]; then
     #cp dwi.bvecs output_dwi/dwi.bvecs #flipped bvecs
 
     # simpler version
-    grad=$outsub/dwi/${outfile}_space-ACPC_desc-preproc_dwi.b
+    grads=($(ls $outsub/dwi/${outfile}*_space-ACPC*_desc-preproc*_dwi.b))
+    if [[ ${#grads[@]} -eq 1 ]]; then
+        grad=${grads[0]}
+    else
+        echo "Too many gradient files found: ${grads[@]}"
+        exit 1
+    fi
     time singularity exec -e docker://brainlife/mrtrix3:3.0.3 \
         mrconvert output_dwi/dwi.nii.gz -grad $grad output.mif \
         -export_grad_fsl output_dwi/dwi.bvecs dwi.bvals -force
