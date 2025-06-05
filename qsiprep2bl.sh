@@ -111,6 +111,6 @@ fi
 [ ! -f ./regressors/regressors.tsv ] && cp $outsub/dwi/*desc-confounds*.tsv ./regressors/regressors.tsv
 
 # copy dwiqc.json file to dwiqc directory
-## qsiprep 0.24.0: qc file is now a single line csv
+## qsiprep 1.0.1: qc file is now a tsv file
 [ ! -d ./dwiqc ] && mkdir -p dwiqc
-[ ! -f ./dwiqc/dwiqc.json ] && cp $outsub/dwi/*desc-image_qc.csv ./dwiqc/dwiqc.csv
+[ ! -f ./dwiqc/dwiqc.json ] && cp $outsub/dwi/*desc-image_qc.tsv ./dwiqc/dwiqc.tsv
