@@ -14,11 +14,8 @@ WORKDIRNAME=$(pwd)/qsipworkdir
 outdir=$(pwd)/output
 
 dwi=$(jq -r .dwi config.json)
-## check if input was t1 or t2, so far only t1
-
 space=$(jq -r .output_space config.json)
-resolution=$(jq -r .output_resolution config.json) 
-#sub=$(jq -r '._inputs[] | select(.id == "t1w") | .meta.subject' config.json)
+resolution=$(jq -r .output_resolution config.json)
 sub=$(jq -r '._inputs[0].meta.subject' config.json)
 skipbidsvalidation=$(jq -r .skipbidsvalidation config.json)
 denoise_method=$(jq -r .denoise_method config.json)
@@ -27,10 +24,8 @@ unringing_method=$(jq -r .unringing_method config.json)
 hmc_transform=$(jq -r .hmc_transform config.json)
 infant=$(jq -r .infant config.json)
 syn_sdc=$(jq -r .syn_sdc config.json)
-force_syn=$(jq -r .force_syn config.json) #keep to be back compatible
+force_syn=$(jq -r .force_syn config.json)
 check_flip_bvecs=$(jq -r .check_flip_bvecs config.json)
-#reconall=$(jq -r .reconall config.json)
-
 b1_biascorrect_stage=$(jq -r .b1_biascorrect_stage config.json)
 hmc_model=$(jq -r .hmc_model config.json)
 pepolar_method=$(jq -r .pepolar_method config.json)
@@ -38,71 +33,41 @@ pepolar_method=$(jq -r .pepolar_method config.json)
 optional=""
 
 if [[ $dwi == *","* ]]; then 
-    echo "Multi dwi input found. Distortion group merge option: ${distortion_group_merge}"; 
-    optional="$optional --distortion-group-merge ${distortion_group_merge}";    
+    echo "Multi dwi input found. Distortion group merge option: ${distortion_group_merge}"
+    optional="$optional --distortion-group-merge ${distortion_group_merge}"
 fi
 
 # Handling spatial normalization based on output_space
 if [[ $space == "MNI152NLin2009cAsym" ]]; then
     echo "Performing normalization to MNI152NLin2009cAsym space."
     optional="$optional --anatomical-template MNI152NLin2009cAsym"
-# else
-#     echo "Skipping normalization to template space, using T1w space."
-#     optional="$optional --skip-anat-based-spatial-normalization"
 fi
 
 # boolean options
 [ $skipbidsvalidation == "true" ] && optional="$optional --skip-bids-validation"
 [ $infant == "true" ] && optional="$optional --infant"
-# [ $syn_sdc == "true" ] && optional="$optional --use-syn-sdc --force-syn"
-#[ $reconall == "true" ] && optional="$optional --do-reconall"
 
 ## bl2bids not compatible with opposite PE directions: 
 ## it adds arbitrary acq labels & mess up with file grouping.
 ## use the bidsguess as labeling instead
 dwi_use_bidsguess=$(jq -r .dwi_use_bidsguess config.json)
 if [[ $dwi_use_bidsguess == "true" ]]; then
-    ## for each dwi.json/nii.gz file in bids/sub-XXX/dwi
-    jsons=$(ls bids/sub-$sub/dwi/*.json)
-    for json in $jsons
-    do
-        ## get bidsguess from json 
-        guess=$(jq -r .BidsGuess[1] $json)
-        ## rename nii.gz/bvec/bval/... files with sub-XXX$(guess)
-        base=$(basename $json .json)
+    echo "Using BidsGuess renaming across sessions (recursive)."
+    find bids/sub-$sub -type f -path "*/dwi/*.json" -print0 | while IFS= read -r -d '' json; do
+        guess=$(jq -r .BidsGuess[1] "$json")
+        base=$(basename "$json" .json)
+        dir=$(dirname "$json")
         echo "Renaming $base files with BidsGuess: $guess"
-        for fn in $(ls bids/sub-$sub/dwi/$base.*)
-        do
+        for fn in "$dir"/$base.*; do
             suffix=${fn#*.}
-            mv $fn bids/sub-$sub/dwi/sub-${sub}${guess}.${suffix}
+            mv "$fn" "$dir/sub-${sub}${guess}.${suffix}"
         done
     done
 fi
-    
+
 # remove if stuff already exists
 rm -rf $WORKDIRNAME && mkdir -p $WORKDIRNAME
 rm -rf $outdir && mkdir -p $outdir
-
-## EXPERIMENTAL: try to use freesufer input
-## removing the following since it's not used in the preprocessing workflow
-#inFSDIR=`jq -r '.fsin' config.json`
-#
-#if [[ $inFSDIR != "null" ]] ; then
-#
-#    #clean up previous freesurfer dir if it exists
-#    rm -rf $outdir/freesurfer
-#    mkdir -p $outdir/freesurfer
-#
-#    #TODO - strip alphanumeric chars?
-#    cp -rH $inFSDIR $outdir/freesurfer/sub-$sub
-#    chmod -R +rw $outdir/freesurfer
-
-#    #run reconall to get the fsaverage folder - 
-#    #it should recognize though the folder just created
-#    if $reconall == "false"; then
-#        optional="$optional --do-reconall"
-#    fi
-#fi
 
 # avoid templateflow problems on HPC's running singularity
 mkdir -p templateflow
@@ -110,12 +75,6 @@ export SINGULARITYENV_TEMPLATEFLOW_HOME=$PWD/templateflow
 
 # set FreeSurfer
 [ -z "$FREESURFER_LICENSE" ] && echo "Please set FREESURFER_LICENSE in .bashrc" && exit 1;
-
-# check and flip bvecs if needed (actually not needed since qsiprep should check it)
-#if [[ $check_flip_bvecs == "true" ]]; then 
-#	echo "check if bvecs need to be flipped - flip them if necessary"
-#	./check_and_flip_bvecs.sh
-#fi
 
 # QSIPrep
 time singularity exec -e \
@@ -137,38 +96,7 @@ time singularity exec -e \
     $optional \
     bids $outdir participant
 
-
-## yes
-# --fs-license-file PATH
-# --skip-anat-based-spatial-normalization
-
-# --output-resolution OUTPUT_RESOLUTION
-# --anat-modality {T1w,T2w,none}
-# --anatomical-template {MNI152NLin2009cAsym}
-# --denoise-method {dwidenoise(d),patch2self,none}
-# --distortion-group-merge {concat,average,none(d)}
-# --unringing-method {none(d),mrdegibbs,rpg}
-
-# --b1-biascorrect-stage {final(d),none,legacy}
-# --hmc-transform {Affine(d),Rigid}
-# --hmc-model {none,3dSHORE,eddy(d?),tensor}
-# --pepolar-method {TOPUP(d),DRBUDDI,TOPUP+DRBUDDI}
-# --use-syn-sdc [{warn,error(d)}]
-
-## maybe
-# --b0-to-t1w-transform {Rigid(d),Affine}  ## check HCP pipeline for this param
-# --intramodal-template-iters INTRAMODAL_TEMPLATE_ITERS
-# --intramodal-template-transform {Rigid,Affine,BSplineSyN,SyN}
-# --eddy-config EDDY_CONFIG
-# --shoreline-iters SHORELINE_ITERS
-#    [--fmap-bspline] [--fmap-no-demean]
-
-
-    
 echo "done with qsiprep! - now organizing output"
 ./qsiprep2bl.sh
 
-# rm -r $WORKDIRNAME # save lots of space    
-
-echo "all done!" 
-
+echo "all done!"
