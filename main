@@ -32,42 +32,54 @@ pepolar_method=$(jq -r .pepolar_method config.json)
 
 optional=""
 
-# multi-DWI merge option
+# Multi-DWI merge option
 if [[ $dwi == *","* ]]; then 
     echo "Multi DWI input found. Distortion group merge option: ${distortion_group_merge}"
     optional="$optional --distortion-group-merge ${distortion_group_merge}"
 fi
 
-# spatial normalization
+# Spatial normalization
 if [[ $space == "MNI152NLin2009cAsym" ]]; then
     echo "Performing normalization to MNI152NLin2009cAsym space."
     optional="$optional --anatomical-template MNI152NLin2009cAsym"
 fi
 
-# boolean options
+# Boolean options
 [ $skipbidsvalidation == "true" ] && optional="$optional --skip-bids-validation"
 [ $infant == "true" ] && optional="$optional --infant"
 
-# --- Handle BidsGuess renaming safely ---
+# --- BidsGuess + fallback based on metadata ---
 dwi_use_bidsguess=$(jq -r .dwi_use_bidsguess config.json)
 if [[ $dwi_use_bidsguess == "true" ]]; then
-    echo "Using BidsGuess renaming (handles single/multi-session + unique names)."
+    echo "Using smart renaming (BidsGuess + metadata-based fallback)."
     find bids/sub-$sub -type f -path "*/dwi/*.json" -print0 | while IFS= read -r -d '' json; do
-        guess=$(jq -r '.BidsGuess[1] // empty' "$json")
         base=$(basename "$json" .json)
         dir=$(dirname "$json")
+        
+        # Try BidsGuess first
+        guess=$(jq -r '.BidsGuess[1] // empty' "$json")
 
+        # If BidsGuess is missing or null, inspect metadata
         if [[ -z "$guess" || "$guess" == "null" ]]; then
-            echo "Skipping $base — no valid BidsGuess found."
-            continue
+            phase=$(jq -r '(.PhaseEncodingDirection // .Direction // .IntendedFor // empty)' "$json" | tr '[:upper:]' '[:lower:]')
+            if [[ "$phase" == *"ap"* ]]; then
+                guess="_acq-AP"
+            elif [[ "$phase" == *"pa"* ]]; then
+                guess="_acq-PA"
+            else
+                echo "No valid BidsGuess or AP/PA info for $base — keeping original name."
+                continue
+            fi
         fi
 
-        echo "Renaming $base files with BidsGuess: $guess"
+        echo "Renaming $base files with tag: $guess"
+
+        # Rename all matching files safely
         for fn in "$dir"/$base.*; do
             suffix=${fn#*.}
             target="$dir/sub-${sub}${guess}.${suffix}"
 
-            # ensure unique name if file exists
+            # ensure unique name if exists
             if [[ -e "$target" ]]; then
                 count=1
                 while [[ -e "$dir/sub-${sub}${guess}_run-${count}.${suffix}" ]]; do
@@ -82,18 +94,18 @@ if [[ $dwi_use_bidsguess == "true" ]]; then
     done
 fi
 
-# clean work/output dirs
+# Clean working/output directories
 rm -rf $WORKDIRNAME && mkdir -p $WORKDIRNAME
 rm -rf $outdir && mkdir -p $outdir
 
-# avoid templateflow problems on HPCs
+# Avoid templateflow problems on HPCs
 mkdir -p templateflow
 export SINGULARITYENV_TEMPLATEFLOW_HOME=$PWD/templateflow
 
 # FreeSurfer license check
 [ -z "$FREESURFER_LICENSE" ] && echo "Please set FREESURFER_LICENSE in .bashrc" && exit 1;
 
-# quick visual check
+# Quick sanity check
 tree bids
 
 # --- Run QSIPrep ---
