@@ -99,10 +99,10 @@ export SINGULARITYENV_TEMPLATEFLOW_HOME=$PWD/templateflow
 # sanity check
 tree bids
 
-    #docker://pennbbl/qsiprep:0.24.0 \
+    # docker://pennlinc/qsiprep:1.0.1  \
 # --- Run QSIPrep ---
 time singularity exec -e \
-    docker://pennlinc/qsiprep:1.0.1 \
+     docker://pennbbl/qsiprep:0.24.0 \
     qsiprep \
     --fs-license-file license.txt \
     --anat-modality T1w \
