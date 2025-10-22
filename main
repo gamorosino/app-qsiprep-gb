@@ -4,11 +4,12 @@
 
 set -x
 set -e
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/"
 export FREESURFER_LICENSE="hayashis@iu.edu 29511 *CPmh9xvKQKHE FSg0ijTusqaQc"
 echo $FREESURFER_LICENSE > license.txt
 
 bl2bids
+
 
 WORKDIRNAME=$(pwd)/qsipworkdir
 outdir=$(pwd)/output
@@ -71,8 +72,13 @@ if [[ $dwi_use_bidsguess == "true" ]]; then
         echo "Renaming $base files → tag: $tag"
 
         for fn in "$dir"/$base.*; do
-            suffix=${fn#*.}
-            mv "$fn" "$dir/sub-${sub}${tag}.${suffix}"
+            # Handle both single- and double-extension files (.nii.gz)
+            if [[ "$fn" == *.nii.gz ]]; then
+                mv "$fn" "$dir/sub-${sub}${tag}_dwi.nii.gz"
+            else
+                ext="${fn##*.}"
+                mv "$fn" "$dir/sub-${sub}${tag}_dwi.${ext}"
+            fi
         done
 
         ((i++))
@@ -93,9 +99,10 @@ export SINGULARITYENV_TEMPLATEFLOW_HOME=$PWD/templateflow
 # sanity check
 tree bids
 
+    #docker://pennbbl/qsiprep:0.24.0 \
 # --- Run QSIPrep ---
 time singularity exec -e \
-    docker://pennbbl/qsiprep:0.24.0 \
+    docker://pennlinc/qsiprep:1.0.1 \
     qsiprep \
     --fs-license-file license.txt \
     --anat-modality T1w \
