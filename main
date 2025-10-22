@@ -32,12 +32,13 @@ pepolar_method=$(jq -r .pepolar_method config.json)
 
 optional=""
 
+# multi-DWI merge option
 if [[ $dwi == *","* ]]; then 
-    echo "Multi dwi input found. Distortion group merge option: ${distortion_group_merge}"
+    echo "Multi DWI input found. Distortion group merge option: ${distortion_group_merge}"
     optional="$optional --distortion-group-merge ${distortion_group_merge}"
 fi
 
-# Handling spatial normalization based on output_space
+# spatial normalization
 if [[ $space == "MNI152NLin2009cAsym" ]]; then
     echo "Performing normalization to MNI152NLin2009cAsym space."
     optional="$optional --anatomical-template MNI152NLin2009cAsym"
@@ -47,39 +48,55 @@ fi
 [ $skipbidsvalidation == "true" ] && optional="$optional --skip-bids-validation"
 [ $infant == "true" ] && optional="$optional --infant"
 
-## bl2bids not compatible with opposite PE directions: 
-## it adds arbitrary acq labels & mess up with file grouping.
-## use the bidsguess as labeling instead
+# --- Handle BidsGuess renaming safely ---
 dwi_use_bidsguess=$(jq -r .dwi_use_bidsguess config.json)
 if [[ $dwi_use_bidsguess == "true" ]]; then
-    echo "Using BidsGuess renaming across sessions (recursive)."
+    echo "Using BidsGuess renaming (handles single/multi-session + unique names)."
     find bids/sub-$sub -type f -path "*/dwi/*.json" -print0 | while IFS= read -r -d '' json; do
-        guess=$(jq -r .BidsGuess[1] "$json")
+        guess=$(jq -r '.BidsGuess[1] // empty' "$json")
         base=$(basename "$json" .json)
         dir=$(dirname "$json")
+
+        if [[ -z "$guess" || "$guess" == "null" ]]; then
+            echo "Skipping $base — no valid BidsGuess found."
+            continue
+        fi
+
         echo "Renaming $base files with BidsGuess: $guess"
         for fn in "$dir"/$base.*; do
             suffix=${fn#*.}
-            mv "$fn" "$dir/sub-${sub}${guess}.${suffix}"
+            target="$dir/sub-${sub}${guess}.${suffix}"
+
+            # ensure unique name if file exists
+            if [[ -e "$target" ]]; then
+                count=1
+                while [[ -e "$dir/sub-${sub}${guess}_run-${count}.${suffix}" ]]; do
+                    ((count++))
+                done
+                target="$dir/sub-${sub}${guess}_run-${count}.${suffix}"
+                echo "File exists, renaming to $target"
+            fi
+
+            mv "$fn" "$target"
         done
     done
 fi
 
-# remove if stuff already exists
+# clean work/output dirs
 rm -rf $WORKDIRNAME && mkdir -p $WORKDIRNAME
 rm -rf $outdir && mkdir -p $outdir
 
-# avoid templateflow problems on HPC's running singularity
+# avoid templateflow problems on HPCs
 mkdir -p templateflow
 export SINGULARITYENV_TEMPLATEFLOW_HOME=$PWD/templateflow
 
-# set FreeSurfer
+# FreeSurfer license check
 [ -z "$FREESURFER_LICENSE" ] && echo "Please set FREESURFER_LICENSE in .bashrc" && exit 1;
 
-
+# quick visual check
 tree bids
 
-# QSIPrep
+# --- Run QSIPrep ---
 time singularity exec -e \
     docker://pennbbl/qsiprep:0.24.0 \
     qsiprep \
