@@ -62,6 +62,7 @@ if [[ $dwi_use_bidsguess == "true" ]]; then
         # If BidsGuess is missing or null, inspect metadata
         if [[ -z "$guess" || "$guess" == "null" ]]; then
             phase=$(jq -r '(.PhaseEncodingDirection // .Direction // .IntendedFor // empty)' "$json" | tr '[:upper:]' '[:lower:]')
+            echo phase information from json file: ${phase}
             if [[ "$phase" == *"ap"* ]]; then
                 guess="_acq-AP"
             elif [[ "$phase" == *"pa"* ]]; then
