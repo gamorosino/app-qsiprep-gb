@@ -2,13 +2,32 @@
 ## stuff from jobheader.sh
 #PBS -N qsiprep
 
+
+CPUs_available () {
+                        ############# ############# ############# ############# ############# ############# #############
+                        #############  Stima il numero di processori liberi a partire dal carico della CPU  ############# 
+                        ############# ############# ############# ############# ############# ############# #############                  
+                        
+			local cpu_load=$( echo $( top -b -n2 | grep "Cpu(s)" | awk '{print $2+$4}' | tail -n1 ))		# calcolo del carico della cpu%
+			local cpu_load_f=$(echo "scale=5; ${cpu_load}/100  " | bc)
+			local cpu_num_all_n=$(( $( getconf _NPROCESSORS_ONLN )-0 ))	
+			local cores_used=$(echo "scale=5; ${cpu_load_f}*${cpu_num_all_n} " | bc)
+			local cores_used=${cores_used%.*}
+			local cores_used=$(( ${cores_used}-0 ))								# numero processori attalmente in uso
+			local cpu_num_all=$(( cpu_num_all_n-$cores_used))							# numero totale processori disponibili
+			echo $cpu_num_all
+
+			};
+
+
 set -x
 set -e
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/"
 export FREESURFER_LICENSE="hayashis@iu.edu 29511 *CPmh9xvKQKHE FSg0ijTusqaQc"
 echo $FREESURFER_LICENSE > license.txt
 
 bl2bids
+
 
 WORKDIRNAME=$(pwd)/qsipworkdir
 outdir=$(pwd)/output
@@ -71,8 +90,13 @@ if [[ $dwi_use_bidsguess == "true" ]]; then
         echo "Renaming $base files → tag: $tag"
 
         for fn in "$dir"/$base.*; do
-            suffix=${fn#*.}
-            mv "$fn" "$dir/sub-${sub}${tag}.${suffix}"
+            # Handle both single- and double-extension files (.nii.gz)
+            if [[ "$fn" == *.nii.gz ]]; then
+                mv "$fn" "$dir/sub-${sub}${tag}_dwi.nii.gz"
+            else
+                ext="${fn##*.}"
+                mv "$fn" "$dir/sub-${sub}${tag}_dwi.${ext}"
+            fi
         done
 
         ((i++))
@@ -93,9 +117,12 @@ export SINGULARITYENV_TEMPLATEFLOW_HOME=$PWD/templateflow
 # sanity check
 tree bids
 
+singularity exec -e  docker://pennlinc/qsiprep:1.0.1 python ./validate_phase_encoding.py bids
+
+    #docker://docker://pennlinc/qsiprep:1.0.1 \
 # --- Run QSIPrep ---
 time singularity exec -e \
-    docker://pennbbl/qsiprep:0.24.0 \
+     docker://pennbbl/qsiprep:0.24.0 \
     qsiprep \
     --fs-license-file license.txt \
     --anat-modality T1w \
@@ -106,7 +133,7 @@ time singularity exec -e \
     --hmc-model $hmc_model \
     --b1-biascorrect-stage $b1_biascorrect_stage \
     --pepolar-method $pepolar_method \
-    --nthreads 8 \
+    --nthreads $( CPUs_available ) \
     --verbose \
     --work-dir $WORKDIRNAME \
     --stop-on-first-crash \
