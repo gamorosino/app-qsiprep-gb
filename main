@@ -117,9 +117,34 @@ export SINGULARITYENV_TEMPLATEFLOW_HOME=$PWD/templateflow
 # sanity check
 tree bids
 
+
+# --- Sanitize .bval and .bvec files for FSL compliance ---
+echo "Fixing malformed .bval/.bvec files in BIDS before QSIPrep..."
+
+find bids -type f -name "*.bval" | while read -r f; do
+    vals=$(tr '\n' ' ' < "$f" | sed 's/  */ /g; s/ *$//')
+    echo "$vals" > "$f"
+    echo "Fixed bval: $f"
+done
+
+find bids -type f -name "*.bvec" | while read -r f; do
+    # Count lines to see if transposition is needed
+    nlines=$(wc -l < "$f")
+    if [ "$nlines" -ne 3 ]; then
+        echo "↻ Transposing malformed bvec: $f"
+        awk '{for(i=1;i<=NF;i++) a[NR,i]=$i} END{for(i=1;i<=NF;i++){for(j=1;j<=NR;j++) printf a[j,i]" "; print ""}}' "$f" > "${f}.tmp"
+        mv "${f}.tmp" "$f"
+    fi
+    echo "Fixed bvec: $f"
+done
+
+echo "All .bval/.bvec files are now FSL-compliant."
+
+
 singularity exec -e  docker://pennlinc/qsiprep:1.0.1 python ./validate_phase_encoding.py bids
 
-    #docker://docker://pennlinc/qsiprep:1.0.1 \
+
+#docker://docker://pennlinc/qsiprep:1.0.1 \
 # --- Run QSIPrep ---
 time singularity exec -e \
      docker://pennbbl/qsiprep:0.24.0 \
