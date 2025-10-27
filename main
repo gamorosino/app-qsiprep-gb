@@ -4,9 +4,6 @@
 
 
 CPUs_available () {
-                        ############# ############# ############# ############# ############# ############# #############
-                        #############  Stima il numero di processori liberi a partire dal carico della CPU  ############# 
-                        ############# ############# ############# ############# ############# ############# #############                  
                         
 			local cpu_load=$( echo $( top -b -n2 | grep "Cpu(s)" | awk '{print $2+$4}' | tail -n1 ))		# calcolo del carico della cpu%
 			local cpu_load_f=$(echo "scale=5; ${cpu_load}/100  " | bc)
@@ -104,8 +101,8 @@ if [[ $dwi_use_bidsguess == "true" ]]; then
 fi
 
 # clean work/output dirs
-rm -rf $WORKDIRNAME && mkdir -p $WORKDIRNAME
-rm -rf $outdir && mkdir -p $outdir
+#rm -rf $WORKDIRNAME && mkdir -p $WORKDIRNAME
+#rm -rf $outdir && mkdir -p $outdir
 
 # avoid templateflow problems on HPCs
 mkdir -p templateflow
