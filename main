@@ -159,6 +159,7 @@ echo ">>> bvec integrity check completed."
 
 singularity exec -e  docker://pennlinc/qsiprep:1.0.1 python ./validate_phase_encoding.py bids
 
+echo "Number cores available: "$( CPUs_available ) 
 
 #docker://docker://pennlinc/qsiprep:1.0.1 \
 # --- Run QSIPrep ---
