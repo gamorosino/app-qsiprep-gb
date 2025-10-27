@@ -114,29 +114,48 @@ export SINGULARITYENV_TEMPLATEFLOW_HOME=$PWD/templateflow
 # sanity check
 tree bids
 
+# --- bvec/bval integrity check ---
+echo ">>> Checking and fixing DWI bvec integrity..."
 
-# --- Sanitize .bval and .bvec files for FSL compliance ---
-echo "Fixing malformed .bval/.bvec files in BIDS before QSIPrep..."
+find bids -type f -name "*.bvec" | while read -r bvec; do
+    echo "Checking: $bvec"
+    rows=$(awk 'END{print NR}' "$bvec")
+    cols=$(awk 'NR==1{print NF}' "$bvec")
 
-find bids -type f -name "*.bval" | while read -r f; do
-    vals=$(tr '\n' ' ' < "$f" | sed 's/  */ /g; s/ *$//')
-    echo "$vals" > "$f"
-    echo "Fixed bval: $f"
-done
-
-find bids -type f -name "*.bvec" | while read -r f; do
-    # Count lines to see if transposition is needed
-    nlines=$(wc -l < "$f")
-    if [ "$nlines" -ne 3 ]; then
-        echo "↻ Transposing malformed bvec: $f"
-        awk '{for(i=1;i<=NF;i++) a[NR,i]=$i} END{for(i=1;i<=NF;i++){for(j=1;j<=NR;j++) printf a[j,i]" "; print ""}}' "$f" > "${f}.tmp"
-        mv "${f}.tmp" "$f"
+    if [ "$rows" -ne 3 ]; then
+        echo "   Warning: $bvec has $rows rows instead of 3 — truncating/fixing."
+        head -n 3 "$bvec" > tmp && mv tmp "$bvec"
     fi
-    echo "Fixed bvec: $f"
+
+    awk '{$1=$1; print}' "$bvec" > tmp && mv tmp "$bvec"
+
+    awk '{print NF}' "$bvec" | uniq -c > tmpcount
+    if [ "$(wc -l < tmpcount)" -ne 1 ]; then
+        echo "   Mismatch in column counts across rows in $bvec"
+        cat tmpcount
+    else
+        echo "   Consistent row structure: 3 rows × $cols columns"
+    fi
+    rm -f tmpcount
 done
 
-echo "All .bval/.bvec files are now FSL-compliant."
+echo ">>> Cross-checking .bval and .bvec column counts..."
+for bval in $(find bids -type f -name "*.bval"); do
+    base=${bval%.bval}
+    bvec=${base}.bvec
+    if [ -f "$bvec" ]; then
+        nval=$(awk '{print NF}' "$bval")
+        nbvec=$(awk 'NR==1{print NF}' "$bvec")
+        if [ "$nval" -ne "$nbvec" ]; then
+            echo "   Mismatch: $(basename $base) → bval=$nval, bvec=$nbvec"
+        else
+            echo "   $(basename $base): counts match ($nval)"
+        fi
+    fi
+done
 
+echo ">>> bvec integrity check completed."
+# --- end integrity check ---
 
 singularity exec -e  docker://pennlinc/qsiprep:1.0.1 python ./validate_phase_encoding.py bids
 
